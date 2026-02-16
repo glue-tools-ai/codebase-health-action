@@ -1,6 +1,6 @@
 name: 'Codebase Health Check'
 description: 'Automated codebase health scoring for pull requests. Analyzes code complexity, documentation, test coverage, dependency health, and git collaboration patterns.'
-author: 'Glue <hello@glue.tools>'
+author: 'Glue <hello@getglueapp.com>'
 
 branding:
   icon: 'activity'
@@ -134,7 +134,7 @@ runs:
                 for rec in recs[:5]:
                     md += f"- {rec}\n"
 
-        md += "\n---\n*Powered by [codebase-health-score](https://github.com/AiGlue/codebase-health-score) from [Glue](https://glue.tools)*"
+        md += "\n---\n*Powered by [codebase-health-score](https://github.com/glue-tools-ai/codebase-health-score) from [Glue](https://getglueapp.com)*"
 
         with open('/tmp/health-comment.md', 'w') as f:
             f.write(md)

@@ -47,7 +47,7 @@ jobs:
         with:
           fetch-depth: 0  # Full history for git analysis
 
-      - uses: AiGlue/codebase-health-action@v1
+      - uses: glue-tools-ai/codebase-health-action@v1
         with:
           comment-on-pr: 'true'
 ```
@@ -80,7 +80,7 @@ jobs:
 ### Fail CI Below a Threshold
 
 ```yaml
-- uses: AiGlue/codebase-health-action@v1
+- uses: glue-tools-ai/codebase-health-action@v1
   with:
     fail-threshold: '60'  # Fail if score drops below 60
 ```
@@ -88,7 +88,7 @@ jobs:
 ### Use Score in Subsequent Steps
 
 ```yaml
-- uses: AiGlue/codebase-health-action@v1
+- uses: glue-tools-ai/codebase-health-action@v1
   id: health
 
 - name: Check results
@@ -100,7 +100,7 @@ jobs:
 ### JSON Output for Custom Processing
 
 ```yaml
-- uses: AiGlue/codebase-health-action@v1
+- uses: glue-tools-ai/codebase-health-action@v1
   id: health
   with:
     format: 'json'
@@ -132,9 +132,9 @@ jobs:
 
 ## Built By
 
-Built by [Glue](https://glue.tools) — AI codebase intelligence for product teams.
+Built by [Glue](https://getglueapp.com) — AI codebase intelligence for product teams.
 
-This action uses [codebase-health-score](https://github.com/AiGlue/codebase-health-score), our open-source repository health analyzer. For continuous monitoring with deeper analysis including feature discovery, tribal knowledge extraction, and natural language codebase querying, check out [Glue](https://glue.tools).
+This action uses [codebase-health-score](https://github.com/glue-tools-ai/codebase-health-score), our open-source repository health analyzer. For continuous monitoring with deeper analysis including feature discovery, tribal knowledge extraction, and natural language codebase querying, check out [Glue](https://getglueapp.com).
 
 ## License
 
