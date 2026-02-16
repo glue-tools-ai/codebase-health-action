@@ -1,0 +1,195 @@
+name: 'Codebase Health Check'
+description: 'Automated codebase health scoring for pull requests. Analyzes code complexity, documentation, test coverage, dependency health, and git collaboration patterns.'
+author: 'Glue <hello@glue.tools>'
+
+branding:
+  icon: 'activity'
+  color: 'orange'
+
+inputs:
+  path:
+    description: 'Path to the repository to analyze'
+    required: false
+    default: '.'
+  fail-threshold:
+    description: 'Minimum health score (0-100) to pass the check. Set to 0 to never fail.'
+    required: false
+    default: '0'
+  comment-on-pr:
+    description: 'Post health report as a PR comment'
+    required: false
+    default: 'true'
+  format:
+    description: 'Output format: markdown, json'
+    required: false
+    default: 'markdown'
+  include-recommendations:
+    description: 'Include improvement recommendations in the report'
+    required: false
+    default: 'true'
+
+outputs:
+  score:
+    description: 'Overall health score (0-100)'
+  grade:
+    description: 'Letter grade (A-F)'
+  report:
+    description: 'Full health report in the specified format'
+  complexity-score:
+    description: 'Code complexity dimension score (0-25)'
+  documentation-score:
+    description: 'Documentation dimension score (0-20)'
+  test-score:
+    description: 'Test coverage dimension score (0-20)'
+  dependency-score:
+    description: 'Dependency health dimension score (0-15)'
+  git-score:
+    description: 'Git collaboration dimension score (0-20)'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install codebase-health-score
+      shell: bash
+      run: pip install codebase-health-score gitpython click rich
+
+    - name: Run health analysis
+      id: analyze
+      shell: bash
+      run: |
+        REPORT=$(codebase-health report ${{ inputs.path }} --format json 2>/dev/null || echo '{"error": "Analysis failed"}')
+
+        # Parse scores from JSON
+        SCORE=$(echo "$REPORT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('overall_score', 0))" 2>/dev/null || echo "0")
+        GRADE=$(echo "$REPORT" | python3 -c "
+        import sys, json
+        d = json.load(sys.stdin)
+        s = d.get('overall_score', 0)
+        grades = [(90,'A'),(80,'B'),(70,'C'),(60,'D')]
+        print(next((g for t,g in grades if s >= t), 'F'))
+        " 2>/dev/null || echo "F")
+
+        # Extract dimension scores
+        COMPLEXITY=$(echo "$REPORT" | python3 -c "import sys,json; d=json.load(sys.stdin); dims=d.get('dimensions',{}); print(dims.get('code_complexity',{}).get('score',0))" 2>/dev/null || echo "0")
+        DOCS=$(echo "$REPORT" | python3 -c "import sys,json; d=json.load(sys.stdin); dims=d.get('dimensions',{}); print(dims.get('documentation',{}).get('score',0))" 2>/dev/null || echo "0")
+        TESTS=$(echo "$REPORT" | python3 -c "import sys,json; d=json.load(sys.stdin); dims=d.get('dimensions',{}); print(dims.get('test_coverage',{}).get('score',0))" 2>/dev/null || echo "0")
+        DEPS=$(echo "$REPORT" | python3 -c "import sys,json; d=json.load(sys.stdin); dims=d.get('dimensions',{}); print(dims.get('dependency_health',{}).get('score',0))" 2>/dev/null || echo "0")
+        GIT=$(echo "$REPORT" | python3 -c "import sys,json; d=json.load(sys.stdin); dims=d.get('dimensions',{}); print(dims.get('git_collaboration',{}).get('score',0))" 2>/dev/null || echo "0")
+
+        echo "score=$SCORE" >> $GITHUB_OUTPUT
+        echo "grade=$GRADE" >> $GITHUB_OUTPUT
+        echo "complexity-score=$COMPLEXITY" >> $GITHUB_OUTPUT
+        echo "documentation-score=$DOCS" >> $GITHUB_OUTPUT
+        echo "test-score=$TESTS" >> $GITHUB_OUTPUT
+        echo "dependency-score=$DEPS" >> $GITHUB_OUTPUT
+        echo "git-score=$GIT" >> $GITHUB_OUTPUT
+
+        # Save full report
+        echo "$REPORT" > /tmp/health-report.json
+
+    - name: Generate markdown report
+      if: inputs.comment-on-pr == 'true'
+      id: markdown
+      shell: bash
+      run: |
+        python3 << 'PYEOF'
+        import json, os
+
+        with open('/tmp/health-report.json') as f:
+            data = json.load(f)
+
+        score = data.get('overall_score', 0)
+        grades = [(90,'A'),(80,'B'),(70,'C'),(60,'D')]
+        grade = next((g for t,g in grades if score >= t), 'F')
+
+        emoji_map = {'A': '🟢', 'B': '🟢', 'C': '🟡', 'D': '🟠', 'F': '🔴'}
+        emoji = emoji_map.get(grade, '⚪')
+
+        dims = data.get('dimensions', {})
+
+        md = f"""## {emoji} Codebase Health: {score}/100 (Grade {grade})
+
+| Dimension | Score | Max | Status |
+|-----------|-------|-----|--------|
+| Code Complexity | {dims.get('code_complexity',{}).get('score',0)} | 25 | {'✅' if dims.get('code_complexity',{}).get('score',0) >= 18 else '⚠️' if dims.get('code_complexity',{}).get('score',0) >= 12 else '❌'} |
+| Documentation | {dims.get('documentation',{}).get('score',0)} | 20 | {'✅' if dims.get('documentation',{}).get('score',0) >= 14 else '⚠️' if dims.get('documentation',{}).get('score',0) >= 10 else '❌'} |
+| Test Coverage | {dims.get('test_coverage',{}).get('score',0)} | 20 | {'✅' if dims.get('test_coverage',{}).get('score',0) >= 14 else '⚠️' if dims.get('test_coverage',{}).get('score',0) >= 10 else '❌'} |
+| Dependency Health | {dims.get('dependency_health',{}).get('score',0)} | 15 | {'✅' if dims.get('dependency_health',{}).get('score',0) >= 10 else '⚠️' if dims.get('dependency_health',{}).get('score',0) >= 7 else '❌'} |
+| Git & Collaboration | {dims.get('git_collaboration',{}).get('score',0)} | 20 | {'✅' if dims.get('git_collaboration',{}).get('score',0) >= 14 else '⚠️' if dims.get('git_collaboration',{}).get('score',0) >= 10 else '❌'} |
+"""
+
+        include_recs = os.environ.get('INCLUDE_RECS', 'true')
+        if include_recs == 'true':
+            recs = []
+            for dim_name, dim_data in dims.items():
+                for rec in dim_data.get('recommendations', []):
+                    recs.append(rec)
+            if recs:
+                md += "\n### Recommendations\n\n"
+                for rec in recs[:5]:
+                    md += f"- {rec}\n"
+
+        md += "\n---\n*Powered by [codebase-health-score](https://github.com/AiGlue/codebase-health-score) from [Glue](https://glue.tools)*"
+
+        with open('/tmp/health-comment.md', 'w') as f:
+            f.write(md)
+
+        # Set output using delimiter approach for multiline
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            f.write(f"report<<HEALTH_EOF\n{md}\nHEALTH_EOF\n")
+
+        PYEOF
+
+      env:
+        INCLUDE_RECS: ${{ inputs.include-recommendations }}
+
+    - name: Comment on PR
+      if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const comment = fs.readFileSync('/tmp/health-comment.md', 'utf8');
+
+          // Find existing bot comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const botComment = comments.find(c =>
+            c.user.type === 'Bot' && c.body.includes('Codebase Health:')
+          );
+
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: comment,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment,
+            });
+          }
+
+    - name: Check threshold
+      if: inputs.fail-threshold != '0'
+      shell: bash
+      run: |
+        SCORE=${{ steps.analyze.outputs.score }}
+        THRESHOLD=${{ inputs.fail-threshold }}
+        if [ "$SCORE" -lt "$THRESHOLD" ]; then
+          echo "::error::Codebase health score ($SCORE) is below threshold ($THRESHOLD)"
+          exit 1
+        fi
